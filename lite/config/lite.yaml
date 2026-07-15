@@ -1,0 +1,57 @@
+ilidar_lite_core:
+  ros__parameters:
+    broadcast_ip: ""
+    listening_ip: ""
+    listening_port: 7256
+
+    # Common defaults for every discovered sensor. Topics and child frames are
+    # generated from sensor_sn: /ilidar_lite_<SN>, ilidar_lite_<SN>_link, and
+    # ilidar_lite_<SN>_optical_frame.
+    parent_frame_id: base_link
+    publish_tf: true
+
+    # TODO(json@hybo.co): Measure the product mounting offset and update this
+    # base_link -> ilidar_lite_link transform.
+    mount_translation_x: 0.0
+    mount_translation_y: 0.0
+    mount_translation_z: 0.0
+    mount_rotation_roll: 0.0
+    mount_rotation_pitch: 0.0
+    mount_rotation_yaw: 0.0
+
+    # The link-to-optical rotation follows the ROS optical-frame convention:
+    # link (forward, left, up) -> optical (right, down, forward).
+    # TODO(json@hybo.co): Measure only the optical translation offset.
+    optical_translation_x: 0.0
+    optical_translation_y: 0.0
+    optical_translation_z: 0.0
+    optical_rotation_roll: -1.5707963267948966
+    optical_rotation_pitch: 0.0
+    optical_rotation_yaw: -1.5707963267948966
+
+    publish_depth: true
+    publish_amplitude: true
+    publish_intensity: true
+    publish_confidence: true
+    publish_camera_info: true
+    publish_pointcloud: true
+    publish_pointcloud_amplitude: true
+    publish_info: true
+    publish_diagnostics: true
+
+    sensor_qos_depth: 5
+    diagnostics_qos_depth: 10
+
+    # Optional per-sensor overrides. Missing entries inherit the common values
+    # above; link_frame_id and frame_id retain their SN-derived defaults. All
+    # parameters are fixed after startup; edit this file and restart the node.
+    # devices:
+    #   ilidar_lite_87:
+    #     parent_frame_id: base_link
+    #     mount_translation_x: 0.25
+    #     mount_translation_y: 0.0
+    #     mount_translation_z: 0.8
+    #     mount_rotation_yaw: 0.0
+    #     publish_pointcloud: true
+    #     link_frame_id: ilidar_lite_87_link
+    #     frame_id: ilidar_lite_87_optical_frame

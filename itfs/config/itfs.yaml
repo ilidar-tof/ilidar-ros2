@@ -1,0 +1,36 @@
+ilidar_core:
+  ros__parameters:
+    broadcast_ip: ""
+    listening_ip: ""
+    listening_port: 7256
+
+    parent_frame_id: base_link
+    publish_tf: true
+    mount_translation_x: 0.0
+    mount_translation_y: 0.0
+    mount_translation_z: 0.0
+    mount_rotation_roll: 0.0
+    mount_rotation_pitch: 0.0
+    mount_rotation_yaw: 0.0
+    optical_translation_x: 0.0
+    optical_translation_y: 0.0
+    optical_translation_z: 0.0
+    optical_rotation_roll: -1.5707963267948966
+    optical_rotation_pitch: 0.0
+    optical_rotation_yaw: -1.5707963267948966
+
+    publish_depth: true
+    publish_intensity: true
+    publish_pointcloud: true
+    publish_pointcloud_intensity: true
+    publish_info: true
+    publish_diagnostics: true
+    sensor_qos_depth: 5
+    diagnostics_qos_depth: 10
+
+    # The omitted mapping_file defaults to the installed iTFS-110.dat. Override
+    # an SN with an absolute iTFS-80.dat or custom calibration-table path.
+    # devices:
+    #   ilidar_87:
+    #     mapping_file: /absolute/path/iTFS-80.dat
+    #     mount_translation_y: 0.2

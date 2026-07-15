@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+
+"""Discover iTFS serial numbers and supervise one generated RViz process."""
+
+import copy
+import os
+import re
+import shutil
+import signal
+import subprocess
+import tempfile
+import time
+
+import rclpy
+from rclpy.node import Node
+import yaml
+
+DISPLAY_TOPICS = {
+    "iTFS Points": "points",
+    "Depth Image": "depth/image_raw",
+    "Intensity Image": "intensity/image_raw",
+}
+INFO_PATTERN = re.compile(r"^/ilidar_(\d+)/info$")
+SETTLE_SEC = 1.0
+STOP_TIMEOUT_SEC = 5.0
+
+
+def parse_sensor_sns(text):
+    tokens = [token for token in re.split(r"[\s,;]+", text.strip()) if token]
+    if not tokens:
+        raise ValueError("sensor_sns must contain at least one serial number")
+    result = []
+    for token in tokens:
+        if not token.isdigit() or int(token) >= 0xFFFF:
+            raise ValueError("invalid sensor serial number: {!r}".format(token))
+        value = int(token)
+        if value not in result:
+            result.append(value)
+    return result
+
+
+def discover_sensor_sns(node):
+    discovered = set()
+    last_change = None
+    node.get_logger().info("sensor_sns was omitted; discovering iTFS sensors")
+    while rclpy.ok():
+        rclpy.spin_once(node, timeout_sec=0.1)
+        current = set()
+        for name, _ in node.get_topic_names_and_types():
+            match = INFO_PATTERN.match(name)
+            if match:
+                current.add(int(match.group(1)))
+        if current != discovered:
+            discovered = current
+            last_change = time.monotonic()
+            node.get_logger().info("discovered sensor SNs: {}".format(
+                ", ".join(str(value) for value in sorted(discovered))))
+        if discovered and time.monotonic() - last_change >= SETTLE_SEC:
+            return sorted(discovered)
+    raise RuntimeError("ROS shutdown while discovering iTFS sensors")
+
+
+def build_config(template_path, sensor_sns, fixed_frame):
+    with open(template_path, "r", encoding="utf-8") as stream:
+        config = yaml.safe_load(stream)
+    manager = config["Visualization Manager"]
+    templates = {item.get("Name"): item for item in manager["Displays"]
+                 if item.get("Name") in DISPLAY_TOPICS}
+    missing = set(DISPLAY_TOPICS) - set(templates)
+    if missing:
+        raise ValueError("RViz template is missing displays: {}".format(sorted(missing)))
+    manager["Displays"] = [item for item in manager["Displays"]
+                           if item.get("Name") not in DISPLAY_TOPICS]
+    manager["Global Options"]["Fixed Frame"] = fixed_frame
+    manager["Views"]["Current"]["Target Frame"] = fixed_frame
+    for sensor_sn in sensor_sns:
+        displays = []
+        for name, suffix in DISPLAY_TOPICS.items():
+            display = copy.deepcopy(templates[name])
+            display["Topic"]["Value"] = "/ilidar_{}/{}".format(sensor_sn, suffix)
+            displays.append(display)
+        manager["Displays"].append({
+            "Class": "rviz_common/Group", "Displays": displays, "Enabled": True,
+            "Name": "ilidar_{}".format(sensor_sn)})
+    return config
+
+
+def stop_process(process):
+    if process is None or process.poll() is not None:
+        return
+    process.send_signal(signal.SIGINT)
+    try:
+        process.wait(timeout=STOP_TIMEOUT_SEC)
+        return
+    except subprocess.TimeoutExpired:
+        process.terminate()
+    try:
+        process.wait(timeout=STOP_TIMEOUT_SEC)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def main():
+    rclpy.init()
+    node = Node("ilidar_viewer")
+    process = None
+    temporary_path = None
+    try:
+        node.declare_parameter("sensor_sns", "")
+        node.declare_parameter("fixed_frame", "base_link")
+        node.declare_parameter("rviz_template", "")
+        text = node.get_parameter("sensor_sns").value.strip()
+        sensor_sns = parse_sensor_sns(text) if text else discover_sensor_sns(node)
+        config = build_config(node.get_parameter("rviz_template").value, sensor_sns,
+                              node.get_parameter("fixed_frame").value)
+        descriptor, temporary_path = tempfile.mkstemp(prefix="ilidar_", suffix=".rviz")
+        os.close(descriptor)
+        with open(temporary_path, "w", encoding="utf-8") as stream:
+            yaml.safe_dump(config, stream, sort_keys=False)
+        executable = shutil.which("rviz2")
+        if executable is None:
+            raise RuntimeError("rviz2 executable was not found")
+        process = subprocess.Popen([executable, "-d", temporary_path])
+        while rclpy.ok() and process.poll() is None:
+            rclpy.spin_once(node, timeout_sec=0.1)
+    finally:
+        stop_process(process)
+        if temporary_path and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (KeyError, OSError, RuntimeError, ValueError, yaml.YAMLError) as error:
+        print("Failed to start iTFS RViz viewer: {}".format(error))
+        raise SystemExit(1)

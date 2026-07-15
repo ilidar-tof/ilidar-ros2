@@ -1,0 +1,45 @@
+# Local editor/agent and OS state
+.agents/
+.codex/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Colcon workspace outputs
+/build/
+/install/
+/log/
+/.colcon/
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.venv*/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# CMake and native compiler outputs
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Makefile
+Testing/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.lib
+*.exe
+*.log

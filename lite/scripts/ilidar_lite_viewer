@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+
+"""Discover optional LITE serial numbers and supervise one RViz process."""
+
+import copy
+import os
+import re
+import shutil
+import signal
+import subprocess
+import tempfile
+import time
+
+import rclpy
+from rclpy.node import Node
+import yaml
+
+
+SENSOR_TOPIC_SUFFIXES = {
+    "LITE Points": "points",
+    "Depth Camera": "depth/image_raw",
+    "Amplitude Image": "amplitude/image_raw",
+    "Intensity Image": "intensity/image_raw",
+    "Confidence Image": "confidence/image_raw",
+}
+INFO_TOPIC_PATTERN = re.compile(r"^/ilidar_lite_(\d+)/info$")
+DISCOVERY_SETTLE_SEC = 1.0
+PROCESS_STOP_TIMEOUT_SEC = 5.0
+
+
+def parse_sensor_sns(text):
+    """Parse a delimited decimal SN list while preserving input order."""
+    tokens = [token for token in re.split(r"[\s,;]+", text.strip()) if token]
+    if not tokens:
+        raise ValueError("sensor_sns must contain at least one sensor serial number")
+
+    sensor_sns = []
+    seen = set()
+    for token in tokens:
+        if not token.isdigit():
+            raise ValueError("invalid sensor serial number: {!r}".format(token))
+        sensor_sn = int(token)
+        if sensor_sn < 0 or sensor_sn >= 0xFFFF:
+            raise ValueError("sensor serial number out of range: {}".format(sensor_sn))
+        if sensor_sn not in seen:
+            seen.add(sensor_sn)
+            sensor_sns.append(sensor_sn)
+    return sensor_sns
+
+
+def discover_sensor_sns(node):
+    """Collect every advertised SN, then return after the graph settles."""
+    last_change_at = None
+    discovered = set()
+    node.get_logger().info("sensor_sns was omitted; discovering LITE sensors")
+
+    while rclpy.ok():
+        rclpy.spin_once(node, timeout_sec=0.1)
+        current = set()
+        for topic_name, _ in node.get_topic_names_and_types():
+            match = INFO_TOPIC_PATTERN.match(topic_name)
+            if match:
+                current.add(int(match.group(1)))
+
+        if current != discovered:
+            discovered = current
+            last_change_at = time.monotonic()
+            node.get_logger().info(
+                "discovered sensor SNs: {}".format(
+                    ", ".join(str(sensor_sn) for sensor_sn in sorted(discovered))))
+
+        now = time.monotonic()
+        if discovered and now - last_change_at >= DISCOVERY_SETTLE_SEC:
+            return sorted(discovered)
+    raise RuntimeError("ROS shutdown while discovering LITE sensors")
+
+
+def build_rviz_config(template_path, sensor_sns, fixed_frame):
+    """Clone the sensor display templates into one group per SN."""
+    with open(template_path, "r", encoding="utf-8") as stream:
+        config = yaml.safe_load(stream)
+
+    manager = config["Visualization Manager"]
+    source_displays = manager["Displays"]
+    sensor_templates = {
+        display.get("Name"): display
+        for display in source_displays
+        if display.get("Name") in SENSOR_TOPIC_SUFFIXES
+    }
+    missing = set(SENSOR_TOPIC_SUFFIXES) - set(sensor_templates)
+    if missing:
+        raise ValueError("RViz template is missing displays: {}".format(sorted(missing)))
+
+    # Grid and TF remain global; sensor displays are cloned into one group per SN.
+    manager["Displays"] = [
+        display
+        for display in source_displays
+        if display.get("Name") not in SENSOR_TOPIC_SUFFIXES
+    ]
+    manager["Global Options"]["Fixed Frame"] = fixed_frame
+    manager["Views"]["Current"]["Target Frame"] = fixed_frame
+
+    for sensor_sn in sensor_sns:
+        topic_prefix = "/ilidar_lite_{}".format(sensor_sn)
+        displays = []
+        for name, suffix in SENSOR_TOPIC_SUFFIXES.items():
+            display = copy.deepcopy(sensor_templates[name])
+            display["Name"] = name
+            display["Topic"]["Value"] = "{}/{}".format(topic_prefix, suffix)
+            displays.append(display)
+        manager["Displays"].append(
+            {
+                "Class": "rviz_common/Group",
+                "Displays": displays,
+                "Enabled": True,
+                "Name": "ilidar_lite_{}".format(sensor_sn),
+            }
+        )
+    return config
+
+
+def stop_process(process):
+    """Escalate RViz shutdown without allowing launch teardown to hang."""
+    if process is None or process.poll() is not None:
+        return
+    process.send_signal(signal.SIGINT)
+    try:
+        process.wait(timeout=PROCESS_STOP_TIMEOUT_SEC)
+        return
+    except subprocess.TimeoutExpired:
+        process.terminate()
+    try:
+        process.wait(timeout=PROCESS_STOP_TIMEOUT_SEC)
+        return
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def main():
+    rclpy.init()
+    node = Node("ilidar_lite_viewer")
+    process = None
+    temporary_path = None
+    try:
+        node.declare_parameter("sensor_sns", "")
+        node.declare_parameter("fixed_frame", "base_link")
+        node.declare_parameter("rviz_template", "")
+        sensor_sns_text = node.get_parameter("sensor_sns").value.strip()
+        sensor_sns = (
+            parse_sensor_sns(sensor_sns_text)
+            if sensor_sns_text else discover_sensor_sns(node)
+        )
+        fixed_frame = node.get_parameter("fixed_frame").value
+        rviz_template = node.get_parameter("rviz_template").value
+        config = build_rviz_config(rviz_template, sensor_sns, fixed_frame)
+
+        descriptor, temporary_path = tempfile.mkstemp(
+            prefix="ilidar_lite_", suffix=".rviz"
+        )
+        os.close(descriptor)
+        with open(temporary_path, "w", encoding="utf-8") as temporary:
+            yaml.safe_dump(config, temporary, sort_keys=False)
+
+        rviz_executable = shutil.which("rviz2")
+        if rviz_executable is None:
+            raise RuntimeError("rviz2 executable was not found")
+        process = subprocess.Popen([rviz_executable, "-d", temporary_path])
+
+        while rclpy.ok() and process.poll() is None:
+            rclpy.spin_once(node, timeout_sec=0.1)
+    finally:
+        stop_process(process)
+        if temporary_path is not None and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (KeyError, OSError, RuntimeError, ValueError, yaml.YAMLError) as error:
+        print("Failed to start iLidar LITE RViz viewer: {}".format(error))
+        raise SystemExit(1)
