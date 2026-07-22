@@ -1,7 +1,16 @@
 # Changelog
 
 All notable changes to the iLidar ROS 2 package collection are documented in
-this file. Package-level details are available in each package directory.
+this file.
+
+## [2.0.1] - 2026-07-22
+
+### Changed
+
+- Changed the iTFS-LITE depth visualization from an RViz2 Camera display to an
+  Image display, consistent with the amplitude, intensity, and confidence
+  image streams.
+- Updated collection and package version metadata to V2.0.1.
 
 ## [2.0.0] - 2026-07-15
 

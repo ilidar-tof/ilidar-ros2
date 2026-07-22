@@ -3,7 +3,7 @@
  * @brief ROS 2 core node for iTFS LiDAR
  * @author Junwoo Son (json@hybo.co)
  * @date 2026-07-14
- * @version V2.0.0
+ * @version V2.0.1
  */
 
 #include <algorithm>

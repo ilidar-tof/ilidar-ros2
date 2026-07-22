@@ -2,7 +2,7 @@
 
 ROS 2 C++ packages for the **iTFS** and **iTFS-LITE** product families.
 
-Version: `V2.0.0`
+Version: `V2.0.1`
 
 > [!WARNING]
 > ROS 2 Foxy has reached end of life. Foxy compatibility is retained for

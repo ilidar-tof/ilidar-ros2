@@ -2,7 +2,7 @@
 
 ROS 2 receive-only bridge for the `iTFS::LiDAR` C++ API.
 
-Version: `V2.0.0`
+Version: `V2.0.1`
 
 ## Compatibility
 
@@ -237,7 +237,7 @@ the RViz2 fixed frame and unique per-sensor child frames.
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+See the repository [CHANGELOG.md](../CHANGELOG.md) for release history.
 
 ## License
 

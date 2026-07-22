@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(ilidar_lite_ros2 VERSION 2.0.0)
+project(ilidar_lite_ros2 VERSION 2.0.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -65,7 +65,7 @@ install(DIRECTORY config rviz
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(FILES README.md CHANGELOG.md LICENSE
+install(FILES README.md LICENSE
   DESTINATION share/${PROJECT_NAME}
 )
 
