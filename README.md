@@ -157,12 +157,6 @@ not share the default `base_link`.
 Both packages publish organized XYZ in meters, static TF, sensor information,
 and diagnostics.
 
-## Documentation
-
-- [Complete iTFS ROS 2 guide](itfs/README.md)
-- [Complete iTFS-LITE ROS 2 guide](lite/README.md)
-- [Release history](CHANGELOG.md)
-
 ## License
 
 The ROS wrappers and included SDK source are licensed under the MIT License.

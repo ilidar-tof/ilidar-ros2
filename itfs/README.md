@@ -115,7 +115,7 @@ silent when the configured sensor output does not contain that product.
 |Capture mode|Image layout|ROS behavior|
 |:---:|:---|:---|
 |0|`240 x 320` gray|Intensity topic only|
-|1–3|`capture_row x 320` depth with optional intensity|Depth, optional intensity, and points|
+|1–3|`capture_row x 320` depth with optional intensity|Depth|
 
 Capture mode, row count, `data_output`, model, and serial number are fixed when
 the device context is created. Restart the driver after changing them.
